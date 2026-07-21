@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Step-Based OS Visualizer</title>
+<style>
+body {
+    font-family: Arial;
+    background: #0f172a;
+    color: white;
+    text-align: center;
+}
+button {
+    padding: 8px 12px;
+    margin: 5px;
+    background: #38bdf8;
+    border: none;
+    cursor: pointer;
+}
+.container {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 20px;
+}
+.box {
+    border: 2px solid white;
+    padding: 10px;
+    width: 200px;
+    min-height: 120px;
+}
+.queue-item { background: #34d399; margin: 5px; padding: 5px; }
+.memory-item { background: #facc15; margin: 5px; padding: 5px; }
+.gantt {
+    display: flex;
+    margin: 20px;
+    height: 50px;
+    border: 2px solid white;
+    overflow-x: auto;
+}
+.block {
+    min-width: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.gap { width: 10px; background: gray; }
+.kernel { color: #f87171; }
+.user { color: #4ade80; }
+.status {
+    margin-top: 10px;
+    color: #facc15;
+}
+.diagram {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-top: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Step-Based OS Visualizer (Enhanced)</h1>
+<button onclick="nextStep()">Next Step</button>
+
+<div>
+Mode: <span id="modeText" class="user">User Mode</span>
+</div>
+
+<div id="status" class="status">Click "Next Step" to begin</div>
+
+<h2>Gantt Chart</h2>
+<div id="gantt" class="gantt"></div>
+
+<div class="container">
+    <div class="box">
+        <h3>Ready Queue</h3>
+        <div id="queue"></div>
+    </div>
+
+    <div class="box">
+        <h3>Memory (PCB)</h3>
+        <div id="memory"></div>
+    </div>
+</div>
+
+<h2>Register ↔ PCB</h2>
+<div class="diagram">
+    <div class="box" id="reg">Registers</div>
+    <div>➡</div>
+    <div class="box" id="pcb">PCB</div>
+</div>
+
+<script>
+let processes = [
+    {id:"P1", time:3},
+    {id:"P2", time:2},
+    {id:"P3", time:3},
+    {id:"P4", time:2}
+];
+
+let currentProcess = null;
+let stepCount = 0;
+let interruptCount = 0; // track interrupts
+let phase = "pick";
+
+let gantt = document.getElementById("gantt");
+
+function setStatus(t){ document.getElementById("status").innerText = t; }
+function setMode(t,c){ let m=document.getElementById("modeText"); m.innerText=t; m.className=c; }
+
+function renderQueue(){
+    let q=document.getElementById("queue");
+    q.innerHTML="";
+    processes.forEach(p=>{
+        let d=document.createElement("div");
+        d.className="queue-item";
+        d.innerText=p.id;
+        q.appendChild(d);
+    });
+}
+
+function renderMemory(){
+    let m=document.getElementById("memory");
+    m.innerHTML="";
+    processes.forEach(p=>{
+        let d=document.createElement("div");
+        d.className="memory-item";
+        d.innerText=p.id+" (saved)";
+        m.appendChild(d);
+    });
+}
+
+function addBlock(t){
+    let d=document.createElement("div");
+    d.className="block";
+    d.style.background="#38bdf8";
+    d.innerText=t;
+    gantt.appendChild(d);
+}
+
+function addGap(){
+    let d=document.createElement("div");
+    d.className="gap";
+    gantt.appendChild(d);
+}
+
+function registerFlash(){
+    let r=document.getElementById("reg");
+    let p=document.getElementById("pcb");
+
+    r.style.background="red";
+    setTimeout(()=>{ p.style.background="blue"; },200);
+    setTimeout(()=>{
+        r.style.background="";
+        p.style.background="";
+    },400);
+}
+
+// MAIN STEP FUNCTION
+function nextStep(){
+
+    renderQueue();
+    renderMemory();
+
+    // PICK
+    if(phase==="pick"){
+        if(processes.length===0){
+            setStatus("All processes completed");
+            setMode("Idle","user");
+            return;
+        }
+
+        currentProcess = processes.shift();
+        stepCount = 0;
+
+        setMode("User Mode","user");
+        setStatus("Picked "+currentProcess.id);
+        phase="execute";
+        return;
+    }
+    // EXECUTE
+    if(phase==="execute"){
+        addBlock(currentProcess.id);
+        stepCount++;
+        setStatus("Executing "+currentProcess.id+" (step "+stepCount+")");
+
+        if(stepCount === currentProcess.time){
+            //FIRST INTERRUPT (after P1)
+            if(interruptCount === 0){
+                phase="interrupt";
+            }
+            //SECOND INTERRUPT (after P4)
+            else if(interruptCount === 1 && currentProcess.id === "P4"){
+                phase="interrupt";
+            }
+            else{
+                phase="context";
+            }
+        }
+        return;
+    }
+    // INTERRUPT
+    if(phase==="interrupt"){
+        interruptCount++;
+
+        setMode("Kernel Mode","kernel");
+        setStatus("⚡ Interrupt "+interruptCount+"! Saving "+currentProcess.id);
+
+        registerFlash();
+        addGap();
+
+        processes.push(currentProcess);
+
+        phase="pick";
+        return;
+    }
+    // CONTEXT SWITCH
+    if(phase==="context"){
+        setMode("Kernel Mode","kernel");
+        setStatus("Context Switch from "+currentProcess.id);
+
+        registerFlash();
+        addGap();
+
+        phase="pick";
+        return;
+    }
+}
+</script>
+</body>
+</html>
